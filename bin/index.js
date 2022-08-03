@@ -1,419 +1,289 @@
-#!/usr/bin/env node
-
-//TODO
-//CHECK FOR TRAILING SLASHES ON ALL INPUTS
-
-//IMPORTS
-const chalk = require('chalk');
-const boxen = require('boxen');
-const ora = require('ora');
-const inquirer = require('inquirer');
+const mergeImages = require('merge-images');
 const fs = require('fs');
 const { readFile, writeFile, readdir } = require("fs").promises;
-const mergeImages = require('merge-images');
 const { Image, Canvas } = require('canvas');
-const ImageDataURI = require('image-data-uri');
-
-//SETTINGS
-let basePath;
-let outputPath;
-let traits;
-let traitsToSort = [];
-let order = [];
-let weights = {};
-let names = {};
-let weightedTraits = [];
-let seen = [];
-let metaData = {};
-let config = {
-  metaData: {},
-  useCustomNames: null,
-  deleteDuplicates: null,
-  generateMetadata: null,
-};
-let loadedConfig = false;
-
-let argv = require('minimist')(process.argv.slice(2));
-
-//DEFINITIONS
 const getDirectories = source =>
   fs
     .readdirSync(source, { withFileTypes: true })
     .filter(dirent => dirent.isDirectory())
     .map(dirent => dirent.name);
 
-const sleep = seconds => new Promise(resolve => setTimeout(resolve, seconds * 1000))
-
-//OPENING
-console.log(
-  boxen(
-    chalk.blue(
-      ' /$$   /$$ /$$$$$$$$ /$$$$$$$$        /$$$$$$  /$$$$$$$  /$$$$$$$$        /$$$$$$  /$$$$$$$$ /$$   /$$ /$$$$$$$$ /$$$$$$$   /$$$$$$  /$$$$$$$$ /$$$$$$  /$$$$$$$ \n' +
-        '| $$$ | $$| $$_____/|__  $$__/       /$$__  $$| $$__  $$|__  $$__/       /$$__  $$| $$_____/| $$$ | $$| $$_____/| $$__  $$ /$$__  $$|__  $$__//$$__  $$| $$__  $$\n' +
-        '| $$$$| $$| $$         | $$         | $$  \\ $$| $$  \\ $$   | $$         | $$  \\__/| $$      | $$$$| $$| $$      | $$  \\ $$| $$  \\ $$   | $$  | $$  \\ $$| $$  \\ $$\n' +
-        '| $$ $$ $$| $$$$$      | $$         | $$$$$$$$| $$$$$$$/   | $$         | $$ /$$$$| $$$$$   | $$ $$ $$| $$$$$   | $$$$$$$/| $$$$$$$$   | $$  | $$  | $$| $$$$$$$/\n' +
-        '| $$  $$$$| $$__/      | $$         | $$__  $$| $$__  $$   | $$         | $$|_  $$| $$__/   | $$  $$$$| $$__/   | $$__  $$| $$__  $$   | $$  | $$  | $$| $$__  $$\n' +
-        '| $$\\  $$$| $$         | $$         | $$  | $$| $$  \\ $$   | $$         | $$  \\ $$| $$      | $$\\  $$$| $$      | $$  \\ $$| $$  | $$   | $$  | $$  | $$| $$  \\ $$\n' +
-        '| $$ \\  $$| $$         | $$         | $$  | $$| $$  | $$   | $$         |  $$$$$$/| $$$$$$$$| $$ \\  $$| $$$$$$$$| $$  | $$| $$  | $$   | $$  |  $$$$$$/| $$  | $$\n' +
-        '|__/  \\__/|__/         |__/         |__/  |__/|__/  |__/   |__/          \\______/ |________/|__/  \\__/|________/|__/  |__/|__/  |__/   |__/   \\______/ |__/  |__/\n \n' +
-        'Made with '
-    ) +
-      chalk.red('❤') +
-      chalk.blue(' by NotLuksus'),
-    { borderColor: 'red', padding: 3 }
-  )
-);
-
+const getFiles = source =>  fs.readFileSync(source, 'utf8');
+const ImageDataURI = require('image-data-uri');
+let traits;
+let basePath;
+let outputPath = process.cwd() + '/Assets/Output/';
+let jsonlist = [];
+let margin= { x: 85, y: 161 };
+let generationlist = ["down-up"]//"up-down", "down-up", "down-middle",
 main();
 
+retcount = 0
 async function main() {
-  if(argv['load-config']){
-    let file = argv['load-config'];
-  
-    await loadConfig(file);
-    loadedConfig = true;
-  }
-
-  await loadConfig("config.json");
-  await getBasePath();
-  await getOutputPath();
-  await checkForDuplicates();
-  await generateMetadataPrompt();
-  if (config.generateMetadata) {
-    await metadataSettings();
-  }
-  const loadingDirectories = ora('Loading traits');
-  loadingDirectories.color = 'yellow';
-  loadingDirectories.start();
+  basePath = process.cwd() + '/Assets/Images/Position 1';
   traits = getDirectories(basePath);
-  traitsToSort = [...traits];
-  await sleep(2);
-  loadingDirectories.succeed();
-  loadingDirectories.clear();
-  await traitsOrder(true);
-  await customNamesPrompt();
-  await asyncForEach(traits, async trait => {
-    await setNames(trait);
+  outputPath = process.cwd() + '/Assets/Output/';
+  let json
+  generationlist.forEach(generation => {
+     jsonlist[generation] = require(process.cwd() + '/Assets/Formatted/2/' + generation + '.json');
   });
-  await asyncForEach(traits, async trait => {
-    await setWeights(trait);
-  });
-  const generatingImages = ora('Generating images');
-  generatingImages.color = 'yellow';
-  generatingImages.start();
-  await generateImages();
-  await sleep(2);
-  generatingImages.succeed('All images generated!');
-  generatingImages.clear();
-  if (config.generateMetadata) {
-    const writingMetadata = ora('Exporting metadata');
-    writingMetadata.color = 'yellow';
-    writingMetadata.start();
-    await writeMetadata();
-    await sleep(0.5);
-    writingMetadata.succeed('Exported metadata successfully');
-    writingMetadata.clear();
+  var pickedarray = [];
+  var ar = []
+  
+  var temp = []
+  // pour chaque layer recupere le trait
+  for (let i = 0; i < 18; i++) {
+     temp[i]= jsonlist["down-up"].filter(element => element.id === i);
+     ar[i] =[]
+     for (let j = 0; j < temp[i].length  ; j++  )
+     {
+       let rarity= temp[i][j].rarity
+       for (let v = 0; v < rarity; v++) {
+       
+         ar[i].push(temp[i][j])
+        //ar[i][j+v].rarity = 1
+        //////console.log(ar[i][j+v])
+       }
+
+     }
+     //////console.log(ar[i])
+     for (let j = 0; j < ar[i].length  ;j++  )
+     {
+        
+        ar[i][j].rarity =1
+     
+     }
+
+     
   }
-  if (argv['save-config']) {
-    const writingConfig = ora('Saving configuration');
-    writingConfig.color = 'yellow';
-    writingConfig.start();
-    await writeConfig();
-    await sleep(0.5);
-    writingConfig.succeed('Saved configuration successfully');
-    writingConfig.clear();
+  for (let i = 0; i < 18; i++) {
+    
+    ar[i] = shuffleArray(ar[i]);
+    //ar[i].forEach(x => ////console.log(x));
   }
-}
+ 
 
-//GET THE BASEPATH FOR THE IMAGES
-async function getBasePath() {
-  if (config.basePath !== undefined) { 
-    basePath = config.basePath;
-    return;
-  }
-  const { base_path } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'base_path',
-      message: 'Where are your images located?',
-      choices: [
-        { name: 'In the current directory', value: 0 },
-        { name: 'Somewhere else on my computer', value: 1 },
-      ],
-    },
-  ]);
-  if (base_path === 0) {
-    basePath = process.cwd() + '/images/';
-  } else {
-    const { file_location } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'file_location',
-        message: 'Enter the path to your image files (Absolute filepath)',
-      },
-    ]);
-    let lastChar = file_location.slice(-1);
-    if (lastChar === '/') basePath = file_location;
-    else basePath = file_location + '/';
-  }
-  config.basePath = basePath;
-}
 
-//GET THE OUTPUTPATH FOR THE IMAGES
-async function getOutputPath() {
-  if (config.outputPath !== undefined) {
-    outputPath = config.outputPath
-    return;
-  }
-  const { output_path } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'output_path',
-      message: 'Where should the generated images be exported?',
-      choices: [
-        { name: 'In the current directory', value: 0 },
-        { name: 'Somewhere else on my computer', value: 1 },
-      ],
-    },
-  ]);
-  if (output_path === 0) {
-    outputPath = process.cwd() + '/output/';
-  } else {
-    const { file_location } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'file_location',
-        message:
-          'Enter the path to your output_old directory (Absolute filepath)',
-      },
-    ]);
-    let lastChar = file_location.slice(-1);
-    if (lastChar === '/') outputPath = file_location;
-    else outputPath = file_location + '/';
-  }
-  config.outputPath = outputPath;
-}
+  let smokedorelectrified = false
+  let mask = false
+  let hair = false
+  let facetattoo =false
+  var retcount
+  for (var j = 1994; j < 2593; j++) {
+     retcount = 0
+    for (let i = 0; i < 18; i++) {
+      let pick =  pickRandom(ar[i])
 
-async function checkForDuplicates() {
-  if (config.deleteDuplicates !== null) return;
-  let { checkDuplicates } = await inquirer.prompt([
-    {
-      type: 'confirm',
-      name: 'checkDuplicates',
-      message:
-        'Should duplicated images be deleted? (Might result in less images then expected)',
-    },
-  ]);
-  config.deleteDuplicates = checkDuplicates;
-}
+      //////console.log(ar[i][pick].traitname)
+      if (ar[i][pick].layer === "special eyes") {
+        if (ar[i][pick].traitname.includes("smoke") || ar[i][pick].traitname.includes("lightning")) {
+          smokedorelectrified = true
+        } else {
+          smokedorelectrified = false
+        }
 
-async function generateMetadataPrompt() {
-  if (config.generateMetadata !== null) return;
-  let { createMetadata } = await inquirer.prompt([
-    {
-      type: 'confirm',
-      name: 'createMetadata',
-      message: 'Should metadata be generated?',
-    },
-  ]);
-  config.generateMetadata = createMetadata;
-}
-
-async function metadataSettings() {
-  if (Object.keys(config.metaData).length !== 0) return;
-  let responses = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'metadataName',
-      message: 'What should be the name? (Generated format is NAME#ID)',
-    },
-    {
-      type: 'input',
-      name: 'metadataDescription',
-      message: 'What should be the description?',
-    },
-    {
-      type: 'input',
-      name: 'metadataImageUrl',
-      message: 'What should be the image url? (Generated format is URL/ID)',
-    },
-    {
-      type: 'confirm',
-      name: 'splitFiles',
-      message: 'Should JSON metadata be split in multiple files?',
-    },
-  ]);
-  config.metaData.name = responses.metadataName;
-  config.metaData.description = responses.metadataDescription;
-  config.metaData.splitFiles = responses.splitFiles;
-  let lastChar = responses.metadataImageUrl.slice(-1);
-  if (lastChar === '/') config.imageUrl = responses.metadataImageUrl;
-  else config.imageUrl = responses.metadataImageUrl + '/';
-}
-
-//SELECT THE ORDER IN WHICH THE TRAITS SHOULD BE COMPOSITED
-async function traitsOrder(isFirst) {
-  if (config.order && config.order.length === traits.length) {
-    order = config.order;
-    return;
-  }
-  const traitsPrompt = {
-    type: 'list',
-    name: 'selected',
-    choices: [],
-  };
-  traitsPrompt.message = 'Which trait should be on top of that?';
-  if (isFirst === true) traitsPrompt.message = 'Which trait is the background?';
-  traitsToSort.forEach(trait => {
-    const globalIndex = traits.indexOf(trait);
-    traitsPrompt.choices.push({
-      name: trait.toUpperCase(),
-      value: globalIndex,
-    });
-  });
-  const { selected } = await inquirer.prompt(traitsPrompt);
-  order.push(selected);
-  config.order = order;
-  let localIndex = traitsToSort.indexOf(traits[selected]);
-  traitsToSort.splice(localIndex, 1);
-  if (order.length === traits.length) return;
-  await traitsOrder(false);
-}
-
-//SELECT IF WE WANT TO SET CUSTOM NAMES FOR EVERY TRAITS OR USE FILENAMES
-async function customNamesPrompt() {
-    if (config.useCustomNames !== null) return;
-    let { useCustomNames } = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'useCustomNames',
-        message: 'How should be constructed the names of the traits?',
-        choices: [
-          { name: 'Use filenames as traits names', value: 0 },
-          { name: 'Choose custom names for each trait', value: 1 },
-        ],
-      },
-    ]);
-    config.useCustomNames = useCustomNames;
-}
-
-//SET NAMES FOR EVERY TRAIT
-async function setNames(trait) {
-  if (config.useCustomNames) {
-    names = config.names || names;
-    const files = await getFilesForTrait(trait);
-    const namePrompt = [];
-    files.forEach((file, i) => {
-      if (config.names && config.names[file] !== undefined) return;
-      namePrompt.push({
-        type: 'input',
-        name: trait + '_name_' + i,
-        message: 'What should be the name of the trait shown in ' + file + '?',
-      });
-    });
-    const selectedNames = await inquirer.prompt(namePrompt);
-    files.forEach((file, i) => {
-      if (config.names && config.names[file] !== undefined) return;
-      names[file] = selectedNames[trait + '_name_' + i];
-    });
-    config.names = {...config.names, ...names};
-  } else {
-    const files = fs.readdirSync(basePath + '/' + trait);
-    files.forEach((file, i) => {
-      names[file] = file.split('.')[0];
-    });
-  }
-}
-
-//SET WEIGHTS FOR EVERY TRAIT
-async function setWeights(trait) {
-  if (config.weights && Object.keys(config.weights).length === Object.keys(names).length ) {
-    weights = config.weights;
-    return;
-  }
-  const files = await getFilesForTrait(trait);
-  const weightPrompt = [];
-  files.forEach((file, i) => {
-    weightPrompt.push({
-      type: 'input',
-      name: names[file] + '_weight',
-      message: 'How many ' + names[file] + ' ' + trait + ' should there be?',
-      default: parseInt(Math.round(10000 / files.length)),
-    });
-  });
-  const selectedWeights = await inquirer.prompt(weightPrompt);
-  files.forEach((file, i) => {
-    weights[file] = selectedWeights[names[file] + '_weight'];
-  });
-  config.weights = weights;
-}
-
-//ASYNC FOREACH
-async function asyncForEach(array, callback) {
-  for (let index = 0; index < array.length; index++) {
-    await callback(array[index], index, array);
-  }
-}
-
-//GENERATE WEIGHTED TRAITS
-async function generateWeightedTraits() {
-  for (const trait of traits) {
-    const traitWeights = [];
-    const files = await getFilesForTrait(trait);
-    files.forEach(file => {
-      for (let i = 0; i < weights[file]; i++) {
-        traitWeights.push(file);
       }
-    });
-    weightedTraits.push(traitWeights);
-  }
-}
+      if (ar[i][pick].layer.includes("hair")) {
+         if (ar[i][pick].traitname != "-"){
+            ////console.log(ar[i][pick].traitname)
+          hair = true
+        } else {
+          hair = false
+        }
 
-//GENARATE IMAGES
-async function generateImages() {
-  let noMoreMatches = 0;
-  let images = [];
-  let id = 0;
-  await generateWeightedTraits();
-  if (config.deleteDuplicates) {
-    while (!Object.values(weightedTraits).filter(arr => arr.length == 0).length && noMoreMatches < 20000) {
-      let picked = [];
-      order.forEach(id => {
-        let pickedImgId = pickRandom(weightedTraits[id]);
-        picked.push(pickedImgId);
-        let pickedImg = weightedTraits[id][pickedImgId];
-        images.push(basePath + traits[id] + '/' + pickedImg);
-      });
+    }
+    ////console.log("retry", j, i, pick , ar[i][pick].traitname, smokedorelectrified, hair)
+    if (ar[i][pick].traitname.includes("mask")) {
+      ////console.log("WE HAVE AMASK")
+    }
+    ////console.log(ar[i])
+    let nothing = findnothing(ar[i])
+   
+     if (smokedorelectrified  && ar[i][pick].layer.includes("hair") ) {
+        if (pickedarray.length >1 ){
+          pickedarray.splice(i, 1);
+        }
+        ////console.log(ar[i][nothing.index])
+       ////console.log(ar[i])
+       
+        pickedarray[i]= ar[i][nothing.index];
+        pickedarray[i].traitname = "-"
+        if (nothing.count!=1){
+        ar[i].splice(nothing.index, 1);
+        }
+        hair = false
+      }
+      else if (smokedorelectrified  && (ar[i][pick].traitname.includes("face tattoo") || ar[i][pick].traitname.includes("sacred mark")) ) {
+        if (pickedarray.length >1 ){
+          pickedarray.splice(i, 1);
+        }
+        pickedarray[i]= ar[i][nothing.index];
+        pickedarray[i].traitname = "-"
+        if (nothing.count!=1){
+          ar[i].splice(nothing.index, 1);
+          }
+        hair = false
+      }
+      else if ((smokedorelectrified) && ar[i][pick].layer.includes("face") ) {
+        if (pickedarray.length >1 ){
+          pickedarray.splice(i, 1);
+        }
+          pickedarray[i]= ar[i][nothing.index];
+          pickedarray[i].traitname = "-"
+          if (nothing.count!=1){
+            ar[i].splice(nothing.index, 1);
+            }
 
-      if (existCombination(images)) {
-        noMoreMatches++;
-        images = [];
+
+      } else if ((smokedorelectrified || hair) && ar[i][pick].traitname.includes("mask") ) {
+        ////console.log("RESET MASK")
+        if (retcount>40)
+        {
+          
+          pickedarray[i]= ar[i][nothing.index];
+          pickedarray[i].traitname = "-"
+          if (nothing.count!=1){
+            ar[i].splice(nothing.index, 1);
+            }
+          retcount = 0
+        }
+        else {
+        if (pickedarray.length >1 ){
+          pickedarray.splice(i, 1);
+        }
+        retcount++
+        i--;
+      }
+    }
+      else if (ar[i][pick].rarity == 0 )   {
+        // remove from array and pick again
+        if (retcount>40)
+        {
+          pickedarray[i]= ar[i][nothing.index];
+          pickedarray[i].traitname = "-"
+          if (nothing.count!=1){
+            ar[i].splice(nothing.index, 1);
+            }
+          retcount = 0
+        }
+        else {
+          if (ar[i].length >1 ){
+            ar[i].splice(pick, 1);
+          }
+          retcount++
+          i--;
+       }
+
       } else {
-        generateMetadataObject(id, images);
-        noMoreMatches = 0;
-        order.forEach((id, i) => {
-          remove(weightedTraits[id], picked[i]);
-        });
-        seen.push(images);
-        const b64 = await mergeImages(images, { Canvas: Canvas, Image: Image });
-        await ImageDataURI.outputFile(b64, outputPath + `${id}.png`);
-        images = [];
-        id++;
+        if (ar[i][pick].traitname.includes("mask")) {
+          ////console.log("WEHAVE A MASK")
+        }
+      pickedarray[i]= ar[i][pick];
+      //ar[i][pick].rarity -= 1;
+      ar[i].splice(pick, 1);
+      //onsole.log(jsonlist["up-up"].filter(element => element.id === i)[pick].rarity );
       }
+  }
+  //////console.log(pickedarray);
+  var currentemotion
+  var files = [];
+  var attributes = [];
+  //let smokedorelectrified = false
+  for (let i = 0; i < pickedarray.length; i++) {
+    if (pickedarray[i].layer === "Emotions") {
+      currentemotion=pickedarray[i].traitname
+      ////console.log(pickedarray[i].traitname)
     }
-  } else {
-    while (!Object.values(weightedTraits).filter(arr => arr.length == 0).length) {
-      order.forEach(id => {
-        images.push(
-          basePath + traits[id] + '/' + pickRandomAndRemove(weightedTraits[id])
-        );
-      });
-      generateMetadataObject(id, images);
-      const b64 = await mergeImages(images, { Canvas: Canvas, Image: Image });
-      await ImageDataURI.outputFile(b64, outputPath + `${id}.png`);
-      images = [];
-      id++;
+    if (pickedarray[i].layer === "special eyes") {
+     // ////console.log(currentemotion)
+     // ////console.log("Loading Emotion")
+   files[i] =  { src: await getFilesForTrait (pickedarray[i].layer, pickedarray[i].traitname,generationlist[0],currentemotion), x:margin.x , y:margin.y }
+  } else if (pickedarray[i].layer === "background"){
+    ////console.log("background")
+        files[i] = { src: await getFilesForTrait (pickedarray[i].layer,  pickedarray[i].traitname, generationlist[0]), x:0 , y:0 } ;
+      } else if (pickedarray[i].layer === "faction"){
+        ////console.log("faction")
+
+          }
+      else {
+        files[i] = { src: await getFilesForTrait (pickedarray[i].layer,  pickedarray[i].traitname, generationlist[0]), x:margin.x , y:margin.y } ;
+      }
+      let retrait
+      if (pickedarray[i].layer.includes("left")) {
+        finaltrait = pickedarray[i].traitname + " l"
+      } else {
+        finaltrait = pickedarray[i].traitname
+      }
+
+      attributes[i] =  {"trait_type": pickedarray[i].layer, "value": finaltrait, "rarity": codetoword(pickedarray[i].rarityname)}
+  }
+
+
+
+
+  //////console.log(files)
+
+  try {
+    //console.log(files)
+    const b64 = await mergeImages(files, { Canvas: Canvas, Image: Image },);
+    //////console.log(j)
+    //////console.log(files)
+    // Write picked array to file
+
+
+    var metadata = {
+    "description": "",
+    "external_url": "https://openseacreatures.io/3",
+    "image": "https://storage.googleapis.com/opensea-prod.appspot.com/puffs/3.png",
+    "name": `Cyber Rogue ${j + 1}#`,
+    "attributes": JSON.stringify(attributes)
     }
+    ////console.log(metadata)
+
+  fs.writeFileSync(process.cwd() + `/Assets/Output/${j+1}.json`, JSON.stringify(metadata));
+    await ImageDataURI.outputFile(b64, outputPath + `${j+1}.png`);
+  } catch (err) {
+      console.log(err);
+    }
+  }
+
+
+ /* var currentfile
+ */
+}
+
+
+async function getFilesForTrait(layer,trait,generation,emotion) {
+  emotion = emotion || "";
+  pos = generation.split("-")
+  if (layer === "Emotions") {
+    return basePath + '/' + "Emotions" + '/' + trait + '/' + trait + ".png"
+  }
+  if (layer === "special eyes") {
+
+    return basePath + '/' + "Emotions" + '/' + emotion + '/eyes/' + trait + ".png"
+  } else if (layer === "background") {
+    var rd = randomNumber(1,11).toString()
+    if (rd < 10) {
+    return basePath + '/' + layer + '/DYSTOPIA 0' + rd  + ".png"
+    } else {
+      return basePath + '/' + layer + '/DYSTOPIA ' + rd  + ".png"
+    }
+  } else if (layer === "left weapon" ) {
+    return basePath + '/' + "left arm/" + pos[0] + '/' + "arm/" + trait + ".png"
+  }else if ( layer === "bangle left") {
+    return basePath + '/' + "left arm/" + pos[0] + '/' + "wrists/" + trait + ".png"
+  }
+
+  else if (layer === "right weapon" ) {
+    ////console.log(pos[1])
+    return basePath + '/' + "right arm/" + pos[1] + '/' + "arm/" + trait + ".png"
+  }else if (layer === "up bangle right") {
+    return basePath + '/' + "right arm/" + pos[1] + '/' + "wrists/" + trait + ".png"
+  }
+  else {
+
+  return basePath + '/' + layer + '/' + trait + ".png"
   }
 }
 
@@ -422,6 +292,33 @@ function randomNumber(min, max) {
   return Math.round(Math.random() * (max - min) + min);
 }
 
+//GENERATES RANDOM NUMBER BETWEEN A MAX AND A MIN VALUE
+function codetoword(code) {
+  switch(code)
+{
+    case "L":
+    //Statement or expression;
+      code = "Legendary"
+    break;
+    case "UR":
+    //Statement or expression;
+      code = "Ultra Rare"
+    break;
+    case "R":
+    //Statement or expression;
+      code = "Rare"
+    break;
+    case "UC":
+    //Statement or expression;
+      code = "Uncommon"
+    break;
+    case "C":
+    //Statement or expression;
+     code = "Common"
+    break;
+}
+  return code
+}
 //PICKS A RANDOM INDEX INSIDE AN ARRAY RETURNS IT AND THEN REMOVES IT
 function pickRandomAndRemove(array) {
   const toPick = randomNumber(0, array.length - 1);
@@ -432,72 +329,40 @@ function pickRandomAndRemove(array) {
 
 //PICKS A RANDOM INDEX INSIDE AND ARRAY RETURNS IT
 function pickRandom(array) {
-  return randomNumber(0, array.length - 1);
+  ////console.log(array.length);
+  return randomNumber(0, array.length - 1)
 }
 
-function remove(array, toPick) {
-  array.splice(toPick, 1);
-}
-
-function existCombination(contains) {
-  let exists = false;
-  seen.forEach(array => {
-    let isEqual =
-      array.length === contains.length &&
-      array.every((value, index) => value === contains[index]);
-    if (isEqual) exists = true;
-  });
-  return exists;
-}
-
-function generateMetadataObject(id, images) {
-  metaData[id] = {
-    name: config.metaData.name + '#' + id,
-    description: config.metaData.description,
-    image: config.imageUrl + id,
-    attributes: [],
-  };
-  images.forEach((image, i) => {
-    let pathArray = image.split('/');
-    let fileToMap = pathArray[pathArray.length - 1];
-    metaData[id].attributes.push({
-      trait_type: traits[order[i]],
-      value: names[fileToMap],
-    });
-  });
-}
-
-async function writeMetadata() {
-  if(config.metaData.splitFiles)
-  {
-    let metadata_output_dir = outputPath + "metadata/"
-    if (!fs.existsSync(metadata_output_dir)) {
-      fs.mkdirSync(metadata_output_dir, { recursive: true });
-    }
-    for (var key in metaData){
-      await writeFile(metadata_output_dir + key, JSON.stringify(metaData[key]));
-    }
-  }else
-  {
-    await writeFile(outputPath + 'metadata.json', JSON.stringify(metaData));
+function shuffleArray(array) {
+  let curId = array.length;
+  // There remain elements to shuffle
+  while (0 !== curId) {
+    // Pick a remaining element
+    let randId = Math.floor(Math.random() * curId);
+    curId -= 1;
+    // Swap it with the current element.
+    let tmp = array[curId];
+    array[curId] = array[randId];
+    array[randId] = tmp;
   }
+  return array;
 }
 
-async function loadConfig(file) {
-  if(loadedConfig == false){
-    try {
-      const data = await readFile(file)
-      config = JSON.parse(data.toString());
-    } catch (error) {
-      console.log("Could not load configuration file.");
+function findnothing(array) {
+
+  let index=0 
+  let count=0
+  for (let i=0; i<array.length ; i++) {
+    if (array[i].traitname == "-") {
+      index = i 
+      count++
+      ////console.log(i)
+      if (count>1) {
+        return {index,count}
+      }
     }
   }
-}
-
-async function writeConfig() {
-  await writeFile('config.json', JSON.stringify(config, null, 2));
-}
-
-async function getFilesForTrait(trait) {
-  return (await readdir(basePath + '/' + trait)).filter(file => file !== '.DS_Store');
+  
+  
+  return {index:index,count:count};
 }
